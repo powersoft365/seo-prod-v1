@@ -21,7 +21,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata = {
-  title: "SEOZONE - AI SEO Generator for E-commerce",
+  title: "Powersoft - AI SEO Generator for E-commerce",
   description:
     "Generate optimized SEO titles, descriptions & meta tags for thousands of products in minutes. AI-powered. Export to CSV, Excel, JSON.",
   metadataBase: new URL("https://powersoft.vercel.app"),
@@ -38,21 +38,21 @@ export const metadata = {
     images: [
       "/og-image.png", // or your Cloudinary URL
     ],
-    title: "SEOZONE - AI SEO Generator for E-commerce",
+    title: "Powersoft - AI SEO Generator for E-commerce",
     description:
       "AI-powered SEO content generation for e-commerce products. Bulk optimize titles, descriptions, and meta tags.",
     url: "https://powersoft.vercel.app",
-    siteName: "SEOZONE",
+    siteName: "Powersoft",
     locale: "en_US",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "SEOZONE - AI SEO Generator for E-commerce",
+    title: "Powersoft - AI SEO Generator for E-commerce",
     description:
       "Generate optimized SEO content for thousands of products in minutes. AI-powered titles, descriptions, and meta tags.",
     images: ["/og-image.png"],
-    creator: "@seozone_ai",
+    creator: "@Powersoft_ai",
   },
   robots: {
     index: true,

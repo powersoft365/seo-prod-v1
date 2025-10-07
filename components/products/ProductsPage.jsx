@@ -1719,6 +1719,38 @@ export default function ProductsPage() {
     },
     [dispatch, imagesById, selectedImagesById, badUrls]
   );
+  const MAX_FILE_SIZE = 30 * 1024 * 1024; // 20 MB
+
+  /* ---------- RENDER ---------- */
+  // Shows loading while parsing/uploading; dismisses on success/failure; red error on oversize
+  const handleFileUpload = React.useCallback(
+    async (results, file) => {
+      try {
+        // Size guard (red error)
+        if (file?.size > MAX_FILE_SIZE) {
+          toast.error("File size must not exceed 30 MB.", {
+            style: { background: "#fee", color: "#c00" },
+            duration: 5000,
+          });
+          return;
+        }
+
+        // Proceed with your existing onUpload flow
+        onUpload(results, file);
+
+        // Done
+        // (Optional) success toast already shown by onUpload
+      } catch (err) {
+        toast.dismiss(loadingId);
+        toast.error("Upload failed. Please try again.", {
+          style: { background: "#fee", color: "#c00" },
+        });
+        console.error(err);
+      }
+    },
+    [onUpload]
+  );
+
   if (!productsState) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -1738,7 +1770,7 @@ export default function ProductsPage() {
             <div className="p-6 border-2 border-dashed border-primary/50 rounded-xl bg-primary/5">
               <Package className="h-16 w-16 text-primary/50 mx-auto mb-4" />
               <CSVReader
-                onUploadAccepted={(res, file) => onUpload(res, file)}
+                onUploadAccepted={handleFileUpload}
                 config={{ header: true, skipEmptyLines: true }}
               >
                 {({ getRootProps }) => (
@@ -1768,7 +1800,7 @@ export default function ProductsPage() {
                 {" "}
                 <FileChip />
                 <CSVReader
-                  onUploadAccepted={(res, file) => onUpload(res, file)}
+                  onUploadAccepted={handleFileUpload}
                   config={{ header: true, skipEmptyLines: true }}
                 >
                   {({ getRootProps }) => (
@@ -2122,7 +2154,7 @@ export default function ProductsPage() {
                 columnAutoWidth
                 allowColumnReordering
                 allowColumnResizing
-                height="70vh"
+                height="80vh"
                 onInitialized={(e) => (gridRef.current = e.component)}
                 onContentReady={updateVisibleRowIds}
                 onOptionChanged={(e) => {

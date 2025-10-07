@@ -1,2 +1,2 @@
-const server = "https://seo-gen-server-v1.vercel.app";
+const server = "https://ai-seogen.powersoft365.com";
 export default server;
