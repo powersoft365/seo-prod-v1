@@ -25,6 +25,7 @@ import Link from "next/link";
 import FeedBackWidget from "@/components/sections/FeedBack";
 import { toast } from "sonner";
 import ActiveFeedbackCarousel from "@/components/sections/ActiveFeedBack";
+import Image from "next/image";
 
 // ---------- Small helpers ----------
 const Fade = ({ children, delay = 0 }) => (
@@ -49,17 +50,55 @@ const Feature = ({ icon: Icon, title, desc }) => (
   </div>
 );
 
-const Step = ({ n, title, desc }) => (
-  <div className="flex gap-3">
-    <div className="h-7 w-7 rounded-full bg-primary text-primary-foreground grid place-items-center text-sm font-semibold">
-      {n}
+const Step = ({
+  n = 1,
+  title = "",
+  desc = "",
+  img,
+  imgAlt,
+  className = "",
+}) => {
+  return (
+    <div
+      className={[
+        "group relative overflow-hidden rounded-2xl border bg-card shadow-sm transition-shadow hover:shadow-md",
+        className,
+      ].join(" ")}
+    >
+      {/* Media */}
+      <div className="relative w-full">
+        {img ? (
+          // 16:9 without needing the aspect-ratio plugin
+          <div className="relative w-full pt-[56.25%] overflow-hidden">
+            <Image
+              src={img}
+              alt={imgAlt || title || "step"}
+              fill
+              sizes="(min-width: 1024px) 33vw, 100vw"
+              className="object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+              priority={false}
+            />
+          </div>
+        ) : (
+          <div className="relative w-full pt-[56.25%] grid place-items-center bg-muted/40">
+            <ImagesIcon className="h-8 w-8 opacity-60" />
+          </div>
+        )}
+
+        {/* Floating step badge */}
+        <div className="absolute left-3 top-3 grid h-8 w-8 place-items-center rounded-full bg-primary text-primary-foreground text-sm font-semibold shadow">
+          {n}
+        </div>
+      </div>
+
+      {/* Content */}
+      <div className="p-4 sm:p-5">
+        <div className="font-medium leading-snug">{title}</div>
+        <p className="mt-1 text-sm text-muted-foreground">{desc}</p>
+      </div>
     </div>
-    <div>
-      <div className="font-medium">{title}</div>
-      <p className="text-sm text-muted-foreground">{desc}</p>
-    </div>
-  </div>
-);
+  );
+};
 
 // Centralized smooth-scroll helper that accepts a ref or an element id
 function smoothScrollTo(target) {
@@ -110,7 +149,10 @@ export default function HomePage() {
           <Fade>
             <div className="inline-flex items-center gap-2 rounded-full border bg-background/60 backdrop-blur px-3 py-1 text-xs text-muted-foreground shadow-sm">
               <Sparkles className="h-3.5 w-3.5" />
-              <span>Turn product CSVs into SEO & images—automatically</span>
+              <span>
+                Convert your product catalog into SEO content & images — with
+                zero manual effort
+              </span>
             </div>
           </Fade>
 
@@ -118,12 +160,14 @@ export default function HomePage() {
             <Fade delay={0.05}>
               <div>
                 <h1 className="text-3xl sm:text-4xl lg:text-5xl font-semibold leading-tight">
-                  Generate SEO copy & product images for your catalog—fast
+                  Create SEO titles, descriptions & product images for your
+                  catalog — in seconds
                 </h1>
                 <p className="mt-4 text-muted-foreground max-w-xl">
-                  Upload a CSV, choose what to generate, and export clean
-                  results. Built for ops teams and merchants who need scale
-                  without the hassle.
+                  Just upload your product CSV, choose whether to generate SEO,
+                  images or both, and export polished files. Built for
+                  operations teams and merchants who want scale without the
+                  headaches.
                 </p>
 
                 <div className="mt-6 flex flex-wrap items-center gap-3">
@@ -188,8 +232,11 @@ export default function HomePage() {
                   <VideoModal />
 
                   <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <ShieldCheck className="h-4 w-4" /> No data leaves your
-                    browser
+                    <ShieldCheck className="h-4 w-4" />{" "}
+                    <span>
+                      <strong>Your data stays local</strong> — never sent to our
+                      servers
+                    </span>
                   </div>
                 </div>
 
@@ -204,13 +251,13 @@ export default function HomePage() {
                     variant="secondary"
                     className="inline-flex items-center gap-1"
                   >
-                    <Globe className="h-3 w-3" /> English/Greek
+                    <Globe className="h-3 w-3" /> English & Greek support
                   </Badge>
                   <Badge
                     variant="secondary"
                     className="inline-flex items-center gap-1"
                   >
-                    <Wand2 className="h-3 w-3" /> SEO templates
+                    <Wand2 className="h-3 w-3" /> Template-driven SEO
                   </Badge>
                 </div>
               </div>
@@ -224,23 +271,23 @@ export default function HomePage() {
                 <CardContent className="grid sm:grid-cols-2 gap-4">
                   <Feature
                     icon={FileSpreadsheet}
-                    title="CSV In, Rows Out"
-                    desc="Drag your catalog CSV. We keep IDs, barcodes, and columns intact."
+                    title="CSV in, structure preserved"
+                    desc="Upload your catalog CSV — IDs, barcodes and columns remain intact."
                   />
                   <Feature
                     icon={Images}
-                    title="Image Finder"
-                    desc="Find relevant product images in bulk, then export a clean mapping."
+                    title="Bulk image mapping"
+                    desc="Find relevant product images at scale and export a clean mapping."
                   />
                   <Feature
                     icon={Sparkles}
-                    title="SEO Generator"
-                    desc="Titles, shorts, and long descriptions crafted from chosen fields."
+                    title="SEO content in one pass"
+                    desc="Generate titles, short blurbs and long descriptions from chosen fields."
                   />
                   <Feature
                     icon={Download}
-                    title="One-click Export"
-                    desc="Download SEO and image CSVs ready for import."
+                    title="Ready-to-import exports"
+                    desc="Download SEO and image CSVs that fit straight into your system."
                   />
                 </CardContent>
               </Card>
@@ -254,18 +301,21 @@ export default function HomePage() {
         <div className="grid lg:grid-cols-3 gap-6">
           <Step
             n={1}
-            title="Upload your CSV"
-            desc="We parse headers, keep IDs, and show your rows instantly."
+            title="Upload your catalog CSV"
+            desc="We preserve IDs and structure so everything stays aligned."
+            img="/s-1.png"
           />
           <Step
             n={2}
-            title="Choose Images or SEO"
-            desc="Switch modes anytime. Select source columns and targets."
+            title="Select SEO or Images"
+            desc="Map source fields to targets and switch modes anytime."
+            img="/s-2.png"
           />
           <Step
             n={3}
-            title="Export results"
-            desc="Download image links or SEO copy as clean CSV files."
+            title="Export ready-to-import files"
+            desc="Download clean CSVs for SEO content and image links."
+            img="/s-3.png"
           />
         </div>
       </section>
@@ -284,11 +334,14 @@ export default function HomePage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="text-sm text-muted-foreground">
-              Include a stable <span className="font-medium">id</span> column
-              and any fields you want to show (e.g.{" "}
+              Ensure your CSV includes a stable{" "}
+              <span className="font-medium">ID</span> column (e.g.{" "}
               <span className="font-medium">itemCode</span>,{" "}
-              <span className="font-medium">barcode</span>,{" "}
-              <span className="font-medium">description</span>). Headers
+              <span className="font-medium">SKU</span>,{" "}
+              <span className="font-medium">barcode</span>) plus any other
+              fields you want mapped (e.g.{" "}
+              <span className="font-medium">title</span>,{" "}
+              <span className="font-medium">description</span>). Headers are
               required.
             </CardContent>
           </Card>
@@ -299,9 +352,8 @@ export default function HomePage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="text-sm text-muted-foreground">
-              Yes. Use{" "}
-              <span className="font-medium">Change Selected Option</span> to
-              toggle modes. Your selection and progress are preserved.
+              Yes — switch between SEO and Image mode at any time. Your current
+              settings and progress will stay intact.
             </CardContent>
           </Card>
         </div>

@@ -99,18 +99,6 @@ const SkeletonTierCard = memo(function SkeletonTierCard() {
   );
 });
 
-/* ---------------------------- UI: Empty / Error --------------------------- */
-const EmptyState = memo(function EmptyState() {
-  return (
-    <div className="mx-auto max-w-md text-center">
-      <h3 className="text-lg font-semibold">No pricing plans found</h3>
-      <p className="mt-2 text-sm text-muted-foreground">
-        We couldn’t load any plans right now. Please try again in a moment.
-      </p>
-    </div>
-  );
-});
-
 /* ------------------------ UI: Show-more feature list ----------------------- */
 const FeaturesList = memo(function FeaturesList({ features = [] }) {
   const [open, setOpen] = useState(false);
@@ -318,6 +306,27 @@ function TermsModal({
   );
 }
 
+/* ----------------------------- Gentle Empty UI ---------------------------- */
+const EmptyState = memo(function EmptyState() {
+  return (
+    <div className="mx-auto max-w-md text-center">
+      <h3 className="text-lg font-semibold">Pricing plans are being updated</h3>
+      <p className="mt-2 text-sm text-muted-foreground">
+        We&apos;re refreshing our plans. Check back soon or contact us if you
+        need help choosing a plan.
+      </p>
+      <div className="mt-4 flex items-center justify-center gap-3">
+        <Link
+          href="/claim-tokens"
+          className="inline-flex items-center rounded-md border px-4 py-2 text-sm"
+        >
+          Claim Free Tokens
+        </Link>
+      </div>
+    </div>
+  );
+});
+
 /* --------------------------------- Page ---------------------------------- */
 const Pricing = () => {
   const dispatch = useDispatch();
@@ -357,7 +366,10 @@ const Pricing = () => {
 
       const tier = items.find((t) => t._id === tierId);
       if (!tier || !tier.amount) {
-        throw new Error("Invalid tier or missing amount");
+        alert(
+          "This plan is unavailable right now. Please choose another plan."
+        );
+        return;
       }
 
       const res = await fetch(`${server}/api/payments/wallee/checkout`, {
@@ -374,7 +386,9 @@ const Pricing = () => {
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err?.error || "Failed to create payment session");
+        console.error(err);
+        alert("We couldn't start the payment. Please try again in a moment.");
+        return;
       }
 
       const { paymentPageUrl, transactionId } = await res.json();
@@ -386,7 +400,10 @@ const Pricing = () => {
         } catch {}
       }
 
-      if (!paymentPageUrl) throw new Error("Missing payment page URL");
+      if (!paymentPageUrl) {
+        alert("Payment session created but URL is missing. Please try again.");
+        return;
+      }
 
       try {
         sessionStorage.setItem("suppressBeforeUnload", "1");
@@ -402,14 +419,9 @@ const Pricing = () => {
     try {
       setBusyId(selectedTier._id);
       await startWalleeCheckout({ tierId: selectedTier._id });
-      // navigation will occur above; if it doesn't, reset busy
-      setBusyId(null);
-    } catch (e) {
-      console.error(e);
-      alert("Could not start payment. Please try again.");
-      setBusyId(null);
     } finally {
       setTermsOpen(false);
+      setBusyId(null);
     }
   }, [selectedTier, agreed, startWalleeCheckout]);
 
@@ -429,10 +441,11 @@ const Pricing = () => {
             id="pricing-heading"
             className="text-2xl font-semibold tracking-tight sm:text-3xl lg:text-4xl"
           >
-            Simple, token-based pricing
+            Flexible, token-based pricing
           </h2>
           <p className="mt-3 text-sm text-muted-foreground sm:text-base">
-            Use what you need and pay affordably as you grow.
+            Pay only for what you use. Stay within included tokens and scale
+            affordably as you grow.
           </p>
           <div className="mt-4">
             <Link
@@ -472,18 +485,27 @@ const Pricing = () => {
         {/* Error state */}
         {!loading && error && (
           <div className="mx-auto max-w-md text-center">
-            <h3 className="text-lg font-semibold">Something went wrong</h3>
+            <h3 className="text-lg font-semibold">We’re updating pricing</h3>
             <p className="mt-2 text-sm text-muted-foreground">
-              {String(error)}
+              Something went wrong loading plans. Please try again shortly or
+              contact support.
             </p>
-            <Button className="mt-4" onClick={() => dispatch(fetchPricings())}>
-              Try again
-            </Button>
+            <div className="mt-4 flex items-center justify-center gap-3">
+              <Button onClick={() => dispatch(fetchPricings())}>
+                Try again
+              </Button>
+              <Link
+                href="/contact"
+                className="inline-flex items-center rounded-md border px-4 py-2 text-sm"
+              >
+                Contact Support
+              </Link>
+            </div>
           </div>
         )}
 
-        {/* Empty state */}
-        {isEmpty && <EmptyState />}
+        {/* Empty state (softer) */}
+        {!loading && !error && isEmpty && <EmptyState />}
 
         {/* Content grid */}
         {!loading && !error && !isEmpty && (
@@ -502,7 +524,7 @@ const Pricing = () => {
         {/* Helper text */}
         {!loading && !error && !isEmpty && (
           <p className="mt-6 text-center text-xs text-muted-foreground">
-            by clicking &apos;Buy Service&apos;, you need to accept our{" "}
+            by clicking &apos;Buy Service&apos;, you agree to our{" "}
             <Link
               target="_blank"
               href="https://powersoft365.com/privacy-policy/"
