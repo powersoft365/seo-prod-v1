@@ -1,9 +1,11 @@
-// File: app/api/images-zip/route.js
 /* eslint-disable no-console */
 
 // Force Node runtime and prevent static optimization
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+// Vercel/Node time hints (helps avoid early termination on larger zips)
+export const maxDuration = 60; // seconds
 
 /* ---------- helpers ---------- */
 const sanitize = (s) =>
@@ -48,137 +50,120 @@ const ensureUnique = (name, used) => {
   return candidate;
 };
 
-// 🔥 ENHANCED fetch with realistic browser headers, timeout, and redirect handling
+// Build a set of robust proxy fallbacks for when origins block Vercel IPs
+function buildProxyUrls(rawUrl) {
+  const u = String(rawUrl);
+  let hostPath = u.replace(/^https?:\/\//i, ""); // used by some proxies
+  // images.weserv.nl requires no protocol and no leading slash
+  hostPath = hostPath.replace(/^\/+/, "");
+
+  return [
+    // AllOrigins (raw passthrough)
+    `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+    // images.weserv.nl (very reliable for images)
+    `https://images.weserv.nl/?url=${encodeURIComponent(hostPath)}`,
+    // Codetabs proxy
+    `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
+    // isomorphic-git simple CORS proxy
+    `https://cors.isomorphic-git.org/${u}`,
+    // Thingproxy
+    `https://thingproxy.freeboard.io/fetch/${u}`,
+  ];
+}
+
+// Single attempt fetch with browser-like headers
+async function fetchBytes(url, signal) {
+  const res = await fetch(url, {
+    cache: "no-store",
+    signal,
+    headers: {
+      "User-Agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36",
+      Accept:
+        "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+      "Accept-Language": "en-US,en;q=0.9",
+      // Intentionally omit Origin; many image CDNs reject unexpected origins
+      Referer: "https://www.google.com/",
+    },
+    redirect: "follow",
+    // Node fetch ignores Accept-Encoding; leave compress on so gzip is handled
+    compress: true,
+  });
+
+  const contentType = res.headers.get("content-type") || "";
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(
+      `HTTP ${res.status} ${res.statusText} ${
+        text ? `- ${text.slice(0, 140)}` : ""
+      }`
+    );
+  }
+  const ab = await res.arrayBuffer();
+  return { bytes: new Uint8Array(ab), contentType };
+}
+
+// 🔥 Unified fetch with realistic headers, timeout, redirect handling, and MULTI-PROXY fallbacks
 async function fetchAsBytes(url) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
 
   try {
-    const res = await fetch(url, {
-      cache: "no-store",
-      signal: controller.signal,
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36",
-        Accept:
-          "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Accept-Encoding": "gzip, deflate, br",
-        Connection: "keep-alive",
-        Referer: "https://www.google.com/",
-        // ⚠️ NO Origin header — this is key for universal compatibility
-      },
-      redirect: "follow",
-      compress: true,
-    });
-
-    clearTimeout(timeoutId);
-
-    if (!res.ok) {
-      throw new Error(`HTTP ${res.status} ${res.statusText}`);
-    }
-
-    const contentType = res.headers.get("content-type") || "";
-    const ab = await res.arrayBuffer();
-    return {
-      bytes: new Uint8Array(ab),
-      contentType,
-    };
-  } catch (err) {
-    clearTimeout(timeoutId);
-    if (err.name === "AbortError") {
-      throw new Error("Request timeout");
-    }
-
-    // Fallback: Use allorigins.win proxy
-    console.warn(
-      `Direct fetch failed for ${url}. Trying fallback proxy...`,
-      err.message
-    );
-    try {
-      const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(
-        url
-      )}`;
-      const proxyRes = await fetch(proxyUrl, {
-        cache: "no-store",
-        signal: controller.signal,
-        headers: {
-          "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36",
-          Accept:
-            "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
-          "Accept-Language": "en-US,en;q=0.9",
-          "Accept-Encoding": "gzip, deflate, br",
-          Connection: "keep-alive",
-          Referer: "https://www.google.com/",
-        },
-        redirect: "follow",
-        compress: true,
-      });
-
-      if (!proxyRes.ok) {
-        throw new Error(`Proxy HTTP ${proxyRes.status} ${proxyRes.statusText}`);
+    // 1) Try origin directly
+    return await fetchBytes(url, controller.signal);
+  } catch (originErr) {
+    console.warn(`Direct fetch failed for ${url}:`, originErr.message);
+    // 2) Try a sequence of neutral proxies
+    const proxies = buildProxyUrls(url);
+    for (const p of proxies) {
+      try {
+        console.warn(`Trying proxy: ${p}`);
+        const result = await fetchBytes(p, controller.signal);
+        clearTimeout(timeoutId);
+        return result;
+      } catch (proxyErr) {
+        console.warn(`Proxy failed: ${p} -> ${proxyErr.message}`);
       }
-
-      const contentType = proxyRes.headers.get("content-type") || "";
-      const ab = await proxyRes.arrayBuffer();
-      return {
-        bytes: new Uint8Array(ab),
-        contentType,
-      };
-    } catch (proxyErr) {
-      console.error(`Proxy also failed for ${url}:`, proxyErr.message);
-      throw new Error(`Both direct and proxy fetch failed: ${err.message}`);
     }
+    clearTimeout(timeoutId);
+    throw new Error(
+      `All fetch strategies failed for ${url}. Last error: ${originErr.message}`
+    );
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 
-/* ---------- GET (single file passthrough) ---------- */
+/* ---------- GET (single file passthrough proxy) ---------- */
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
   const url = searchParams.get("url");
   if (!url) return new Response("Missing url", { status: 400 });
 
   try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000);
+    // Use the same resilient pipeline as POST to avoid 403s in production
+    const { bytes, contentType } = await fetchAsBytes(url);
 
-    const upstream = await fetch(url, {
-      cache: "no-store",
-      signal: controller.signal,
+    return new Response(bytes, {
       headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36",
-        Accept:
-          "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
-        Referer: "https://www.google.com/",
-      },
-      redirect: "follow",
-      compress: true,
-    });
-
-    clearTimeout(timeoutId);
-
-    if (!upstream.ok) {
-      return new Response("Upstream error", { status: upstream.status });
-    }
-
-    const ct =
-      upstream.headers.get("content-type") || "application/octet-stream";
-    const ab = await upstream.arrayBuffer();
-
-    return new Response(ab, {
-      headers: {
-        "Content-Type": ct,
+        "Content-Type": contentType || "application/octet-stream",
         "Cache-Control": "public, max-age=86400",
+        // Wide-open CORS for browser usage
         "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "GET, POST",
+        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
         "Access-Control-Allow-Headers": "Content-Type",
       },
     });
   } catch (err) {
     console.error("GET image proxy error:", err.message || err);
-    return new Response("Fetch failed", { status: 502 });
+    return new Response("Fetch failed", {
+      status: 502,
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type",
+      },
+    });
   }
 }
 
@@ -193,7 +178,14 @@ export async function POST(req) {
     const legacyItems = Array.isArray(body?.items) ? body.items : null;
 
     if (!files && !legacyItems) {
-      return new Response("Bad request body", { status: 400 });
+      return new Response("Bad request body", {
+        status: 400,
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+          "Access-Control-Allow-Headers": "Content-Type",
+        },
+      });
     }
 
     const used = new Set();
@@ -253,7 +245,14 @@ export async function POST(req) {
     }
 
     if (used.size === 0) {
-      return new Response("No valid images to download", { status: 400 });
+      return new Response("No valid images to download", {
+        status: 400,
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+          "Access-Control-Allow-Headers": "Content-Type",
+        },
+      });
     }
 
     const zipped = await zip.generateAsync({
@@ -269,12 +268,31 @@ export async function POST(req) {
         "Content-Disposition": `attachment; filename=product-images-${today}.zip`,
         "Cache-Control": "no-store",
         "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "GET, POST",
+        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
         "Access-Control-Allow-Headers": "Content-Type",
       },
     });
   } catch (err) {
     console.error("images-zip POST error:", err);
-    return new Response("Zip generation failed", { status: 500 });
+    return new Response("Zip generation failed", {
+      status: 500,
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type",
+      },
+    });
   }
+}
+
+/* ---------- OPTIONS (CORS preflight) ---------- */
+export async function OPTIONS() {
+  return new Response(null, {
+    headers: {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type",
+      "Access-Control-Max-Age": "86400",
+    },
+  });
 }
